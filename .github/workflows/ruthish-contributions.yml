@@ -1,0 +1,55 @@
+name: RUTHISH contribution pattern
+
+on:
+  # 09:00 Asia/Kolkata is 03:30 UTC.
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview today's result without committing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ruthish-contribution-pattern
+  cancel-in-progress: false
+
+jobs:
+  record-pixel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preview today's result
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: python scripts/draw_contributions.py --dry-run
+
+      - name: Record today's pixel if scheduled
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        run: python scripts/draw_contributions.py
+
+      - name: Commit only when a pixel record changed
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain -- contribution-log.md)" ]; then
+            echo "No active pixel today, or the date was already recorded."
+            exit 0
+          fi
+
+          git config user.name "RUTHISH"
+          git config user.email "192595929+ruthishkumar18@users.noreply.github.com"
+          git add contribution-log.md
+          git commit -m "Record RUTHISH pixel for $(TZ=Asia/Kolkata date +%F)"
+          git push
